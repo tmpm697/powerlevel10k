@@ -8446,5 +8446,5 @@ if [[ $+__p9k_instant_prompt_sourced == 1 && $__p9k_instant_prompt_sourced != $_
   zf_rm -f -- $__p9k_dump_file{,.zwc} 2>/dev/null
 fi
 
-_p9k_init_ssh
+# _p9k_init_ssh
 prompt_powerlevel9k_setup
