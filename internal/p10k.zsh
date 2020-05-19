@@ -1,4 +1,4 @@
-if [[ $__p9k_sourced != 11 ]]; then
+if [[ $__p9k_sourced != 12 ]]; then
   >&2 print -P ""
   >&2 print -P "[%F{1}ERROR%f]: Corrupted powerlevel10k installation."
   >&2 print -P ""
@@ -2147,7 +2147,7 @@ prompt_ip() {
 # Segment to display if VPN is active
 prompt_vpn_ip() {
   typeset -ga _p9k__vpn_ip_segments
-  _p9k__vpn_ip_segments+=($_p9k__prompt_side $_p9k__segment_index)
+  _p9k__vpn_ip_segments+=($_p9k__prompt_side $_p9k__line_index $_p9k__segment_index)
   local p='${(e)_p9k__vpn_ip_'$_p9k__prompt_side$_p9k__segment_index'}'
   _p9k__prompt+=$p
   typeset -g "_p9k__segment_val_${_p9k__prompt_side}[_p9k__segment_index]"=$p
@@ -2156,7 +2156,7 @@ prompt_vpn_ip() {
 _p9k_vpn_ip_render() {
   local _p9k__segment_name=vpn_ip _p9k__prompt_side ip
   local -i _p9k__has_upglob _p9k__segment_index
-  for _p9k__prompt_side _p9k__segment_index in $_p9k__vpn_ip_segments; do
+  for _p9k__prompt_side _p9k__line_index _p9k__segment_index in $_p9k__vpn_ip_segments; do
     local _p9k__prompt=
     for ip in $_p9k__vpn_ip_ips; do
       _p9k_prompt_segment prompt_vpn_ip "cyan" "$_p9k_color1" 'VPN_ICON' 0 '' $ip
@@ -3833,7 +3833,7 @@ function _p9k_vcs_resume() {
 
   if (( _p9k_vcs_index && $+GITSTATUS_DAEMON_PID_POWERLEVEL9K )); then
     local _p9k__prompt _p9k__prompt_side=$_p9k_vcs_side _p9k__segment_name=vcs
-    local -i _p9k__has_upglob _p9k__segment_index=_p9k_vcs_index
+    local -i _p9k__has_upglob _p9k__segment_index=_p9k_vcs_index _p9k__line_index=_p9k_vcs_line_index
     _p9k_vcs_render
     typeset -g _p9k__vcs=$_p9k__prompt
   else
@@ -4001,7 +4001,11 @@ prompt_virtualenv() {
   local v=${VIRTUAL_ENV:t}
   [[ $v == $~_POWERLEVEL9K_VIRTUALENV_GENERIC_NAMES ]] && v=${VIRTUAL_ENV:h:t}
   msg+="$_POWERLEVEL9K_VIRTUALENV_LEFT_DELIMITER${v//\%/%%}$_POWERLEVEL9K_VIRTUALENV_RIGHT_DELIMITER"
-  _p9k_prompt_segment "$0" "blue" "$_p9k_color1" 'PYTHON_ICON' 0 '' "$msg"
+  if (( _POWERLEVEL9K_VIRTUALENV_SHOW_WITH_PYENV )); then
+    _p9k_prompt_segment "$0" "blue" "$_p9k_color1" 'PYTHON_ICON' 0 '' "$msg"
+  else
+    _p9k_prompt_segment "$0" "blue" "$_p9k_color1" 'PYTHON_ICON' 0 '${(M)${#P9K_PYENV_PYTHON_VERSION}:#0}' "$msg"
+  fi
 }
 
 _p9k_prompt_virtualenv_init() {
@@ -4365,7 +4369,7 @@ _p9k_gcloud_prefetch() {
   P9K_GCLOUD_CONFIGURATION=$_p9k__ret
   if ! _p9k_cache_stat_get $0 ~/.config/gcloud/configurations/config_$P9K_GCLOUD_CONFIGURATION; then
     local pair account project_id
-    pair="$(gcloud config configurations list --configuration=$P9K_GCLOUD_CONFIGURATION \
+    pair="$(gcloud config configurations describe $P9K_GCLOUD_CONFIGURATION \
       --format=$'value[separator="\1"](properties.core.account,properties.core.project)')"
     (( ! $? )) && IFS=$'\1' read account project_id <<<$pair
     _p9k_cache_stat_set "$account" "$project_id"
@@ -5249,7 +5253,7 @@ _p9k_preexec1() {
 }
 
 _p9k_preexec2() {
-  _p9k__preexec_cmd=$2
+  typeset -g _p9k__preexec_cmd=$2
   _p9k__timer_start=EPOCHREALTIME
 }
 
@@ -6017,10 +6021,9 @@ function _p9k_restore_state() {
     [[ $__p9k_cached_param_pat == $_p9k__param_pat && $__p9k_cached_param_sig == $_p9k__param_sig ]] || return
     (( $+functions[_p9k_restore_state_impl] )) || return
     _p9k_restore_state_impl
-    _p9k__state_restored=1
+    return 0
   } always {
-    unset __p9k_cached_param_sig
-    if (( !_p9k__state_restored )); then
+    if (( $? )); then
       if (( $+functions[_p9k_preinit] )); then
         unfunction _p9k_preinit
         (( $+functions[gitstatus_stop_p9k_] )) && gitstatus_stop_p9k_ POWERLEVEL9K
@@ -6028,6 +6031,7 @@ function _p9k_restore_state() {
       _p9k_delete_instant_prompt
       zf_rm -f -- $__p9k_dump_file{,.zwc} 2>/dev/null
     fi
+    unset __p9k_cached_param_sig
   }
 }
 
@@ -6057,7 +6061,8 @@ function _p9k_clear_instant_prompt() {
         local omz1='[Oh My Zsh] Would you like to update? [Y/n]: '
         local omz2='Updating Oh My Zsh'
         local omz3='https://shop.planetargon.com/collections/oh-my-zsh'
-        if [[ -n ${${unexpected/$omz1}/$omz2*$omz3($'\n'|)} ]]; then
+        local omz4='There was an error updating. Try again later?'
+        if [[ -n ${${unexpected/$omz1}/$omz2*($omz3|$omz4)[^$'\n']#($'\n'|)} ]]; then
           echo -E - ""
           echo -E - "${(%):-[%3FWARNING%f]: Console output during zsh initialization detected.}"
           echo -E - ""
@@ -6152,6 +6157,7 @@ function _p9k_do_dump() {
   eval "$__p9k_intro"
   zle -F $1
   exec {1}>&-
+  (( _p9k__state_dump_fd )) || return
   if (( ! _p9k__instant_prompt_disabled )); then
     _p9k__instant_prompt_sig=$_p9k__cwd:$P9K_SSH:${(%):-%#}
     _p9k_set_instant_prompt
@@ -6363,8 +6369,8 @@ _p9k_precmd_impl() {
           fi
         fi
       fi
+      typeset -gi _p9k__instant_prompt_disabled=instant_prompt_disabled
       _p9k_init
-      _p9k__instant_prompt_disabled=$((_POWERLEVEL9K_DISABLE_INSTANT_PROMPT || instant_prompt_disabled))
     fi
 
     if (( _p9k__timer_start )); then
@@ -6436,7 +6442,7 @@ _p9k_precmd_impl() {
     fi
     if (( ! $+_p9k__vcs )); then
       local _p9k__prompt _p9k__prompt_side=$_p9k_vcs_side _p9k__segment_name=vcs
-      local -i _p9k__has_upglob _p9k__segment_index=_p9k_vcs_index
+      local -i _p9k__has_upglob _p9k__segment_index=_p9k_vcs_index _p9k__line_index=_p9k_vcs_line_index
       _p9k_vcs_render
       typeset -g _p9k__vcs=$_p9k__prompt
     fi
@@ -6520,6 +6526,7 @@ _p9k_init_vars() {
   typeset -gi _p9k_term_has_href
 
   typeset -gi _p9k_vcs_index
+  typeset -gi _p9k_vcs_line_index
   typeset -g  _p9k_vcs_side
 
   typeset -ga _p9k_taskwarrior_meta_files
@@ -6604,7 +6611,6 @@ _p9k_init_vars() {
   typeset -gi _p9k__restore_prompt_fd
   typeset -gi _p9k__can_hide_cursor=$(( $+terminfo[civis] && $+terminfo[cnorm] ))
   typeset -gi _p9k__cursor_hidden
-  typeset -gi _p9k__instant_prompt_disabled
   typeset -gi _p9k__non_hermetic_expansion
   typeset -g  _p9k__time
   typeset -g  _p9k__date
@@ -6614,7 +6620,6 @@ _p9k_init_vars() {
   typeset -gi _p9k__state_dump_scheduled
   typeset -gi _p9k__state_dump_fd
   typeset -gi _p9k__prompt_idx
-  typeset -gi _p9k__state_restored
   typeset -gi _p9k_reset_on_line_finish
   typeset -gF _p9k__timer_start
   typeset -gi _p9k__status
@@ -6728,6 +6733,8 @@ _p9k_init_params() {
       _POWERLEVEL9K_INSTANT_PROMPT=verbose
     fi
   fi
+
+  (( _POWERLEVEL9K_DISABLE_INSTANT_PROMPT )) && _p9k__instant_prompt_disabled=1
 
   _p9k_declare -s POWERLEVEL9K_TRANSIENT_PROMPT off
   [[ $_POWERLEVEL9K_TRANSIENT_PROMPT == (off|always|same-dir) ]] || _POWERLEVEL9K_TRANSIENT_PROMPT=off
@@ -7008,6 +7015,7 @@ _p9k_init_params() {
   _p9k_declare -e POWERLEVEL9K_VI_VISUAL_MODE_STRING
   # OVERWRITE mode is shown as INSERT unless POWERLEVEL9K_VI_OVERWRITE_MODE_STRING is explicitly set.
   _p9k_declare -e POWERLEVEL9K_VI_OVERWRITE_MODE_STRING
+  _p9k_declare -b POWERLEVEL9K_VIRTUALENV_SHOW_WITH_PYENV 1
   _p9k_declare -b POWERLEVEL9K_VIRTUALENV_SHOW_PYTHON_VERSION 1
   _p9k_declare -e POWERLEVEL9K_VIRTUALENV_LEFT_DELIMITER "("
   _p9k_declare -e POWERLEVEL9K_VIRTUALENV_RIGHT_DELIMITER ")"
@@ -7620,7 +7628,7 @@ _p9k_must_init() {
     [[ $sig == $_p9k__param_sig ]] && return 1
     _p9k_deinit
   fi
-  _p9k__param_pat=$'v84\1'${ZSH_VERSION}$'\1'${ZSH_PATCHLEVEL}$'\1'
+  _p9k__param_pat=$'v87\1'${ZSH_VERSION}$'\1'${ZSH_PATCHLEVEL}$'\1'
   _p9k__param_pat+=$'${#parameters[(I)POWERLEVEL9K_*]}\1${(%):-%n%#}\1$GITSTATUS_LOG_LEVEL\1'
   _p9k__param_pat+=$'$GITSTATUS_ENABLE_LOGGING\1$GITSTATUS_DAEMON\1$GITSTATUS_NUM_THREADS\1'
   _p9k__param_pat+=$'$GITSTATUS_CACHE_DIR\1\1${ZLE_RPROMPT_INDENT:-1}\1$__p9k_ksh_arrays\1'
@@ -7819,8 +7827,9 @@ function _p9k_init_cacheable() {
 
   if [[ $#_POWERLEVEL9K_VCS_BACKENDS == 1 && $_POWERLEVEL9K_VCS_BACKENDS[1] == git ]]; then
     local elem line
-    local -i i=0
+    local -i i=0 line_idx=0
     for line in $_p9k_line_segments_left; do
+      (( ++line_idx ))
       for elem in ${${(0)line}%_joined}; do
         (( ++i ))
         if [[ $elem == vcs ]]; then
@@ -7828,13 +7837,16 @@ function _p9k_init_cacheable() {
             _p9k_vcs_index=-1
           else
             _p9k_vcs_index=i
+            _p9k_vcs_line_index=line_idx
             _p9k_vcs_side=left
           fi
         fi
       done
     done
     i=0
+    line_idx=0
     for line in $_p9k_line_segments_right; do
+      (( ++line_idx ))
       for elem in ${${(0)line}%_joined}; do
         (( ++i ))
         if [[ $elem == vcs ]]; then
@@ -7842,6 +7854,7 @@ function _p9k_init_cacheable() {
             _p9k_vcs_index=-1
           else
             _p9k_vcs_index=i
+            _p9k_vcs_line_index=line_idx
             _p9k_vcs_side=right
           fi
         fi
@@ -7859,6 +7872,7 @@ function _p9k_init_cacheable() {
     fi
     if (( _p9k_vcs_index == -1 )); then
       _p9k_vcs_index=0
+      _p9k_vcs_line_index=0
       _p9k_vcs_side=
     fi
   fi
@@ -7868,7 +7882,16 @@ _p9k_init_vcs() {
   _p9k_segment_in_use vcs || return
   _p9k_vcs_info_init
   if (( $+functions[_p9k_preinit] )); then
-    (( $+GITSTATUS_DAEMON_PID_POWERLEVEL9K )) && gitstatus_start_p9k_ POWERLEVEL9K
+    if (( $+GITSTATUS_DAEMON_PID_POWERLEVEL9K )); then
+      () {
+        trap 'return 130' INT
+        {
+          gitstatus_start_p9k_ POWERLEVEL9K
+        } always {
+          trap ':' INT
+        }
+      }
+    fi
     return 0
   fi
   (( _POWERLEVEL9K_DISABLE_GITSTATUS )) && return
@@ -7896,14 +7919,21 @@ _p9k_init_vcs() {
           -a POWERLEVEL9K
   }"
   source $gitstatus_dir/gitstatus.plugin.zsh _p9k_ || return
-  gitstatus_start_p9k_                                    \
-    -s $_POWERLEVEL9K_VCS_STAGED_MAX_NUM                  \
-    -u $_POWERLEVEL9K_VCS_UNSTAGED_MAX_NUM                \
-    -d $_POWERLEVEL9K_VCS_UNTRACKED_MAX_NUM               \
-    -c $_POWERLEVEL9K_VCS_CONFLICTED_MAX_NUM              \
-    -m $_POWERLEVEL9K_VCS_MAX_INDEX_SIZE_DIRTY            \
-    ${${_POWERLEVEL9K_VCS_RECURSE_UNTRACKED_DIRS:#0}:+-e} \
-    POWERLEVEL9K
+  () {
+    trap 'return 130' INT
+    {
+      gitstatus_start_p9k_                                    \
+        -s $_POWERLEVEL9K_VCS_STAGED_MAX_NUM                  \
+        -u $_POWERLEVEL9K_VCS_UNSTAGED_MAX_NUM                \
+        -d $_POWERLEVEL9K_VCS_UNTRACKED_MAX_NUM               \
+        -c $_POWERLEVEL9K_VCS_CONFLICTED_MAX_NUM              \
+        -m $_POWERLEVEL9K_VCS_MAX_INDEX_SIZE_DIRTY            \
+        ${${_POWERLEVEL9K_VCS_RECURSE_UNTRACKED_DIRS:#0}:+-e} \
+        POWERLEVEL9K
+    } always {
+      trap ':' INT
+    }
+  }
 }
 
 _p9k_init() {

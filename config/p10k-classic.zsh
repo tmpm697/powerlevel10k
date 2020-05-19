@@ -846,6 +846,8 @@
   typeset -g POWERLEVEL9K_VIRTUALENV_FOREGROUND=37
   # Don't show Python version next to the virtual environment name.
   typeset -g POWERLEVEL9K_VIRTUALENV_SHOW_PYTHON_VERSION=false
+  # Don't show virtualenv if pyenv is already shown.
+  typeset -g POWERLEVEL9K_VIRTUALENV_SHOW_WITH_PYENV=false
   # Separate environment name from Python version only with a space.
   typeset -g POWERLEVEL9K_VIRTUALENV_{LEFT,RIGHT}_DELIMITER=
   # Custom icon.
@@ -871,6 +873,19 @@
   typeset -g POWERLEVEL9K_PYENV_PROMPT_ALWAYS_SHOW=false
   # If set to false, hide python version if it's equal to "system".
   typeset -g POWERLEVEL9K_PYENV_SHOW_SYSTEM=true
+
+  # Pyenv segment format. The following parameters are available within the expansion.
+  #
+  # - P9K_CONTENT                Current pyenv environment (pyenv version-name).
+  # - P9K_PYENV_PYTHON_VERSION   Current python version (python --version).
+  #
+  # The default format has the following logic:
+  #
+  # 1. Display "$P9K_CONTENT $P9K_PYENV_PYTHON_VERSION" if $P9K_PYENV_PYTHON_VERSION is not
+  #   empty and unequal to $P9K_CONTENT.
+  # 2. Otherwise display just "$P9K_CONTENT".
+  typeset -g POWERLEVEL9K_PYENV_CONTENT_EXPANSION='${P9K_CONTENT}${${P9K_PYENV_PYTHON_VERSION:#$P9K_CONTENT}:+ $P9K_PYENV_PYTHON_VERSION}'
+
   # Custom icon.
   # typeset -g POWERLEVEL9K_PYENV_VISUAL_IDENTIFIER_EXPANSION='⭐'
 
